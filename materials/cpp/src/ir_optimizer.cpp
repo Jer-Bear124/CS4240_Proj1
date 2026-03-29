@@ -9,27 +9,28 @@
 std::shared_ptr<ircpp::IRProgram> IROptimizer::optimizeProgram(const ircpp::IRProgram& originalProgram) {
     auto optimizedProgram = std::make_shared<ircpp::IRProgram>();
     
-    // Build CFGs for all functions
-    std::vector<ircpp::ControlFlowGraph> cfgs;
     for (const auto& func : originalProgram.functions) {
-        cfgs.push_back(ircpp::CFGBuilder::buildCFG(*func));
-    }
-    
-    // Perform dead code analysis
-    DeadCodeResult deadCodeResult = analyzeDeadCode(cfgs);
-    
-    // Optimize each function
-    for (size_t funcIdx = 0; funcIdx < originalProgram.functions.size(); ++funcIdx) {
-        const auto& originalFunc = originalProgram.functions[funcIdx];
-        const auto& deadCodeAnalysis = deadCodeResult.functionResults[funcIdx]["analysis"];
-        
-        auto optimizedFunc = optimizeFunction(*originalFunc);
-        
-        // Remove dead instructions from the optimized function
-        optimizedFunc->instructions = eliminateDeadInstructions(
-            optimizedFunc->instructions, 
-            deadCodeAnalysis.deadInstructions);
-        
+        auto optimizedFunc = optimizeFunction(*func);
+
+        bool changed;
+        do {
+            changed = false;
+
+            ircpp::ControlFlowGraph cfg = ircpp::CFGBuilder::buildCFG(*optimizedFunc);
+            DeadCodeResult deadCodeResult = analyzeDeadCode({cfg});
+            const auto& deadCodeAnalysis = deadCodeResult.functionResults[0]["analysis"];
+
+            int init_cnt = static_cast<int>(optimizedFunc->instructions.size());
+
+            optimizedFunc->instructions = eliminateDeadInstructions(
+                optimizedFunc->instructions,
+                deadCodeAnalysis.deadInstructions);
+
+            int end_cnt = static_cast<int>(optimizedFunc->instructions.size());
+
+            if(init_cnt != end_cnt) changed = true;
+        } while(changed);
+
         optimizedProgram->functions.push_back(optimizedFunc);
     }
 
